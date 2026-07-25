@@ -1,0 +1,303 @@
+<title>Voice Command Recorder</title>
+<meta name="description" content="Record a few short voice commands to help train an on-device fitness voice model.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root{
+    --bg:#13161b; --surface:#1c2027; --surface2:#242a33; --line:#2f3742;
+    --ink:#eef1f4; --muted:#98a4b0; --accent:#ffb020; --rec:#ff4d4f; --ok:#3dd68c;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+    min-height:100dvh; display:flex; justify-content:center;
+    padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));
+  }
+  .wrap{width:100%; max-width:520px; display:flex; flex-direction:column; gap:20px}
+  header{display:flex; align-items:center; justify-content:space-between; gap:12px}
+  .brand{display:flex; align-items:center; gap:9px; font-weight:650; letter-spacing:.01em}
+  .dot{width:11px; height:11px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 4px rgba(255,176,32,.15)}
+  .count{font-family:var(--mono); font-size:.82rem; color:var(--muted); font-variant-numeric:tabular-nums}
+  .bar{height:5px; background:var(--surface2); border-radius:99px; overflow:hidden}
+  .bar>i{display:block; height:100%; width:0; background:var(--accent); border-radius:99px; transition:width .35s cubic-bezier(.2,.7,.2,1)}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:26px 22px; display:flex; flex-direction:column; gap:18px}
+  h1{font-size:1.5rem; line-height:1.2; margin:0; text-wrap:balance; letter-spacing:-.01em}
+  p{margin:0; color:var(--muted)}
+  .lede{color:var(--muted)}
+  label.field{display:flex; flex-direction:column; gap:7px; font-size:.82rem; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; font-weight:600}
+  input[type=text]{
+    font:inherit; font-size:1.05rem; color:var(--ink); background:var(--surface2);
+    border:1px solid var(--line); border-radius:11px; padding:13px 14px; width:100%;
+  }
+  input[type=text]::placeholder{color:#5f6b78}
+  input[type=text]:focus-visible{outline:2px solid var(--accent); outline-offset:1px; border-color:transparent}
+
+  button{font:inherit; cursor:pointer; border:0; border-radius:12px}
+  .btn{background:var(--accent); color:#20160a; font-weight:680; font-size:1.02rem; padding:15px 18px; width:100%; letter-spacing:.01em}
+  .btn:active{transform:translateY(1px)}
+  .btn.ghost{background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:600}
+  .btn:disabled{opacity:.4; cursor:not-allowed}
+  .btn.ok{background:var(--ok); color:#06281a}
+  button:focus-visible{outline:2px solid #fff; outline-offset:2px}
+
+  .kind{align-self:flex-start; font-family:var(--mono); font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+    padding:4px 10px; border-radius:99px; border:1px solid var(--line); color:var(--muted)}
+  .kind.cmd{color:var(--accent); border-color:rgba(255,176,32,.4)}
+  .kind.neg{color:#8ab4ff; border-color:rgba(138,180,255,.35)}
+  .say{font-size:2rem; line-height:1.12; font-weight:720; letter-spacing:-.02em; text-wrap:balance; margin:2px 0}
+  .hint{color:var(--muted); display:flex; gap:9px; align-items:flex-start}
+  .hint svg{flex:none; margin-top:3px}
+
+  .meter{height:56px; background:var(--surface2); border-radius:12px; border:1px solid var(--line); overflow:hidden; position:relative}
+  .meter canvas{width:100%; height:100%; display:block}
+  .meter .idle{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#5f6b78; font-size:.85rem; gap:8px}
+
+  .recbtn{display:flex; align-items:center; justify-content:center; gap:11px; height:60px; border-radius:14px;
+    background:var(--surface2); border:1px solid var(--line); color:var(--ink); font-weight:650; font-size:1.05rem; width:100%}
+  .recbtn .glyph{width:20px; height:20px; border-radius:50%; background:var(--rec); transition:.18s}
+  .recbtn.live{border-color:var(--rec); color:var(--rec)}
+  .recbtn.live .glyph{border-radius:4px; transform:scale(.8); animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  @media (prefers-reduced-motion:reduce){ .recbtn.live .glyph{animation:none} .bar>i{transition:none} }
+
+  .row{display:flex; gap:10px}
+  .row>*{flex:1}
+  audio{width:100%; margin-top:2px; filter:invert(.9) hue-rotate(180deg)}
+  .status{display:flex; align-items:center; gap:8px; font-size:.9rem; color:var(--ok); font-weight:600}
+  .foot{font-size:.82rem; color:#6b7784; text-align:center; text-wrap:balance}
+  .err{background:rgba(255,77,79,.1); border:1px solid rgba(255,77,79,.4); color:#ffb3b4; padding:12px 14px; border-radius:11px; font-size:.9rem}
+  .hidden{display:none !important}
+  .big{font-size:2.4rem; font-weight:740; letter-spacing:-.02em}
+  ol{margin:0; padding-left:1.2em; color:var(--muted); display:flex; flex-direction:column; gap:6px}
+  code{font-family:var(--mono); font-size:.85em; background:var(--surface2); padding:1px 6px; border-radius:5px; color:var(--ink)}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span> Voice Command Recorder</div>
+    <div class="count" id="count"></div>
+  </header>
+  <div class="bar"><i id="prog"></i></div>
+
+  <!-- INTAKE -->
+  <section class="card" id="s-intake">
+    <h1>Lend your voice — about 5 minutes</h1>
+    <p class="lede">You'll say a handful of short fitness commands a few different ways. It records right here in your browser, then gives you one file to send back. Nothing is uploaded anywhere.</p>
+    <label class="field">Your first name or initials
+      <input type="text" id="name" placeholder="e.g. Ravi" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <p class="foot">Best in a quiet-ish room, phone or laptop held normally. A regular accent and natural pace is exactly what helps.</p>
+    <button class="btn" id="begin">Allow microphone &amp; start</button>
+    <div class="err hidden" id="micerr"></div>
+  </section>
+
+  <!-- RECORD -->
+  <section class="card hidden" id="s-record">
+    <span class="kind" id="kind">Command</span>
+    <div class="say" id="say">start workout</div>
+    <p class="hint" id="hint"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v3.4M8 4.8h.01" stroke-linecap="round"/></svg><span id="hinttxt"></span></p>
+
+    <div class="meter"><canvas id="wave" width="600" height="112"></canvas><div class="idle" id="idle">mic ready — tap record and speak</div></div>
+
+    <button class="recbtn" id="rec"><span class="glyph"></span><span id="reclabel">Record</span></button>
+
+    <audio id="play" class="hidden" controls></audio>
+    <div class="row hidden" id="review">
+      <button class="btn ghost" id="redo">Redo</button>
+      <button class="btn ok" id="next">Keep &amp; next →</button>
+    </div>
+  </section>
+
+  <!-- DONE -->
+  <section class="card hidden" id="s-done">
+    <div class="status"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.2 3.2L13 5" stroke-linecap="round" stroke-linejoin="round"/></svg> All <span id="nclips">0</span> clips recorded</div>
+    <h1>Thank you, <span id="donen" class="big" style="color:var(--accent)"></span>!</h1>
+    <p class="lede" id="sendstate">Sending your recordings…</p>
+    <button class="btn" id="download">Download my recordings (.zip)</button>
+    <p class="foot">Backup: if the auto-send didn't work, email the downloaded file to <strong>harshul.dhar@nexxbase.com</strong>.</p>
+    <button class="btn ghost" id="again">Record again from the start</button>
+  </section>
+</div>
+
+<script>
+"use strict";
+// ---------- prompt list: 7 commands x 4 delivery styles + hard/long negatives ----------
+const CMDS = [
+  ["start_workout","start workout"], ["pause_workout","pause workout"], ["stop_workout","stop workout"],
+  ["start_timer","start timer"], ["pause_timer","pause timer"],
+  ["start_running_workout","start running workout"], ["stop_running_workout","stop running workout"],
+];
+const VARIANTS = [
+  ["normal","Normal pace, your natural voice.",3.0],
+  ["fast","Say it quickly — like you're in a hurry.",3.0],
+  ["slow","Say it slowly and clearly.",3.5],
+  ["pitch","Say it in a higher or lower pitch than usual.",3.0],
+];
+const NEGS = [
+  ["neg_hello","hello","Just say “hello.” (a NON-command)",2.5],
+  ["neg_time","what time is it","A question — not a command.",3.0],
+  ["neg_workoutword","the workout is going really well today","A full sentence that mentions “workout” but ISN'T a command.",5.0],
+  ["neg_free1","(say any natural sentence about your day)","Say ANY sentence, ~4 seconds. Anything natural.",5.0],
+  ["neg_free2","(say another different long sentence)","Any other long sentence — the more natural, the better.",5.0],
+];
+const PROMPTS = [];
+CMDS.forEach(([label,say])=> VARIANTS.forEach(([tag,hint,dur])=> PROMPTS.push({kind:"cmd",label,say,tag,hint,dur})));
+NEGS.forEach(([tag,say,hint,dur])=> PROMPTS.push({kind:"neg",label:"unknown",say,tag,hint,dur}));
+
+// ---------- state ----------
+let name="", idx=0, clips={}, audioCtx, stream, source, processor, srcRate;
+let recording=false, chunks=[], autostop=null, lastWav=null, lastUrl=null;
+const $=id=>document.getElementById(id);
+
+// ---------- audio helpers ----------
+function resampleTo16k(f32,sr){
+  if(sr===16000) return f32;
+  const ratio=sr/16000, n=Math.max(1,Math.floor(f32.length/ratio)), out=new Float32Array(n);
+  for(let i=0;i<n;i++){const x=i*ratio,i0=x|0,fr=x-i0; out[i]=f32[i0]*(1-fr)+((f32[i0+1]||0)*fr);}
+  return out;
+}
+function encodeWav(f32){
+  const n=f32.length, buf=new ArrayBuffer(44+n*2), v=new DataView(buf);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,"RIFF"); v.setUint32(4,36+n*2,true); ws(8,"WAVE"); ws(12,"fmt "); v.setUint32(16,16,true);
+  v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,16000,true); v.setUint32(28,32000,true);
+  v.setUint16(32,2,true); v.setUint16(34,16,true); ws(36,"data"); v.setUint32(40,n*2,true);
+  let o=44; for(let i=0;i<n;i++){let s=Math.max(-1,Math.min(1,f32[i])); v.setInt16(o,s<0?s*0x8000:s*0x7FFF,true); o+=2;}
+  return new Uint8Array(buf);
+}
+// minimal STORED zip with CRC32 (no external libs; CSP-safe)
+const CRCT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
+function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=(c>>>8)^CRCT[(c^b[i])&0xFF];return (c^0xFFFFFFFF)>>>0;}
+function cat(arrs){let n=0;for(const a of arrs)n+=a.length;const o=new Uint8Array(n);let p=0;for(const a of arrs){o.set(a,p);p+=a.length;}return o;}
+const u16=n=>new Uint8Array([n&255,(n>>8)&255]);
+const u32=n=>new Uint8Array([n&255,(n>>8)&255,(n>>16)&255,(n>>24)&255]);
+function makeZip(files){
+  const enc=new TextEncoder(); const parts=[], central=[]; let off=0;
+  for(const f of files){
+    const nm=enc.encode(f.name), d=f.data, crc=crc32(d);
+    const lh=cat([u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(d.length),u32(d.length),u16(nm.length),u16(0),nm]);
+    parts.push(lh,d);
+    central.push(cat([u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(d.length),u32(d.length),u16(nm.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(off),nm]));
+    off+=lh.length+d.length;
+  }
+  const cd=cat(central);
+  const eocd=cat([u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(cd.length),u32(off),u16(0)]);
+  return new Blob([cat(parts),cd,eocd],{type:"application/zip"});
+}
+
+// ---------- level meter ----------
+const cv=$("wave"), cx=cv.getContext("2d"); let peaks=[];
+function drawMeter(rms){
+  peaks.push(Math.min(1,rms*4)); if(peaks.length>120) peaks.shift();
+  cx.clearRect(0,0,cv.width,cv.height);
+  const w=cv.width, h=cv.height, bw=w/120;
+  cx.fillStyle=recording?"#ff4d4f":"#3a4453";
+  for(let i=0;i<peaks.length;i++){const bh=Math.max(2,peaks[i]*h*0.9); cx.fillRect(i*bw, (h-bh)/2, bw*0.7, bh);}
+}
+
+// ---------- mic ----------
+async function initMic(){
+  stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:false,autoGainControl:false}});
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  srcRate=audioCtx.sampleRate;
+  source=audioCtx.createMediaStreamSource(stream);
+  processor=audioCtx.createScriptProcessor(2048,1,1);
+  const mute=audioCtx.createGain(); mute.gain.value=0;
+  processor.onaudioprocess=e=>{
+    const d=e.inputBuffer.getChannelData(0);
+    let s=0; for(let i=0;i<d.length;i++)s+=d[i]*d[i];
+    drawMeter(Math.sqrt(s/d.length));
+    if(recording) chunks.push(new Float32Array(d));
+  };
+  source.connect(processor); processor.connect(mute); mute.connect(audioCtx.destination);
+}
+
+// ---------- flow ----------
+function show(id){["s-intake","s-record","s-done"].forEach(s=>$(s).classList.toggle("hidden",s!==id));}
+function renderProgress(){
+  $("count").textContent = idx<PROMPTS.length ? `${idx+1} / ${PROMPTS.length}` : `${PROMPTS.length} / ${PROMPTS.length}`;
+  $("prog").style.width = (100*idx/PROMPTS.length)+"%";
+}
+function renderPrompt(){
+  const p=PROMPTS[idx]; renderProgress();
+  $("kind").textContent = p.kind==="cmd" ? "Command" : "Not a command";
+  $("kind").className = "kind "+(p.kind==="cmd"?"cmd":"neg");
+  $("say").textContent = p.say;
+  $("hinttxt").textContent = p.hint;
+  $("play").classList.add("hidden"); $("review").classList.add("hidden");
+  $("rec").classList.remove("hidden"); $("idle").style.display="flex";
+  peaks=[]; drawMeter(0);
+}
+function startRec(){
+  const p=PROMPTS[idx];
+  chunks=[]; recording=true;
+  if(audioCtx.state==="suspended") audioCtx.resume();
+  $("rec").classList.add("live"); $("reclabel").textContent="Stop";
+  $("idle").style.display="none";
+  autostop=setTimeout(stopRec, Math.round(p.dur*1000));
+}
+function stopRec(){
+  if(!recording) return; recording=false; clearTimeout(autostop);
+  $("rec").classList.remove("live"); $("reclabel").textContent="Record";
+  let len=0; for(const c of chunks) len+=c.length;
+  const merged=new Float32Array(len); let o=0; for(const c of chunks){merged.set(c,o);o+=c.length;}
+  if(len < srcRate*0.25){ $("idle").style.display="flex"; $("idle").textContent="that was very short — tap record and speak"; return; }
+  lastWav=encodeWav(resampleTo16k(merged,srcRate));
+  if(lastUrl) URL.revokeObjectURL(lastUrl);
+  lastUrl=URL.createObjectURL(new Blob([lastWav],{type:"audio/wav"}));
+  const a=$("play"); a.src=lastUrl; a.classList.remove("hidden");
+  $("rec").classList.add("hidden"); $("review").classList.remove("hidden");
+}
+function keepNext(){
+  const p=PROMPTS[idx];
+  clips[`${p.label}/real_${name}_${p.tag}.wav`]=lastWav;
+  idx++;
+  if(idx>=PROMPTS.length){ finish(); } else { renderPrompt(); }
+}
+let finalZip=null;
+function buildZip(){ return makeZip(Object.keys(clips).map(nm=>({name:nm,data:clips[nm]}))); }
+async function finish(){
+  renderProgress(); $("donen").textContent=name; $("nclips").textContent=Object.keys(clips).length; show("s-done");
+  finalZip = buildZip();
+  // auto-send to the collector (works on Vercel; on hosts without /api it fails -> download+email fallback)
+  try{
+    const r = await fetch("/api/upload?name="+encodeURIComponent(name), {method:"POST", headers:{"Content-Type":"application/zip"}, body:finalZip});
+    if(!r.ok) throw new Error("status "+r.status);
+    $("sendstate").innerHTML = "&#10003; Sent automatically — you're all done. Thank you!";
+    $("sendstate").style.color = "var(--ok)";
+  }catch(e){
+    $("sendstate").innerHTML = "Auto-send unavailable here — please tap <b>Download</b> and email the file to <b>harshul.dhar@nexxbase.com</b>.";
+    $("sendstate").style.color = "var(--accent)";
+  }
+}
+
+// ---------- events ----------
+$("begin").onclick=async()=>{
+  const v=$("name").value.trim().replace(/[^A-Za-z0-9]/g,"").slice(0,20);
+  if(!v){ $("name").focus(); return; }
+  name=v.toLowerCase();
+  $("begin").disabled=true; $("begin").textContent="Starting microphone…";
+  try{ await initMic(); }
+  catch(err){
+    $("micerr").classList.remove("hidden");
+    $("micerr").textContent="Couldn't access the microphone. Allow mic access for this page (check the address-bar icon or Settings), then reload. Error: "+(err&&err.name||err);
+    $("begin").disabled=false; $("begin").textContent="Allow microphone & start"; return;
+  }
+  idx=0; clips={}; show("s-record"); renderPrompt();
+};
+$("rec").onclick=()=> recording ? stopRec() : startRec();
+$("redo").onclick=()=> renderPrompt();
+$("next").onclick=()=> keepNext();
+$("download").onclick=()=>{
+  const url=URL.createObjectURL(finalZip||buildZip());
+  const a=document.createElement("a"); a.href=url; a.download=`kws-samples-${name}.zip`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+};
+$("again").onclick=()=>{ idx=0; clips={}; show("s-record"); renderPrompt(); };
+$("name").addEventListener("keydown",e=>{ if(e.key==="Enter") $("begin").click(); });
+renderProgress();
+</script>
