@@ -128,12 +128,14 @@
   <section class="card hidden" id="s-done">
     <div class="status"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.2 3.2L13 5" stroke-linecap="round" stroke-linejoin="round"/></svg> All <span id="nclips">0</span> clips recorded</div>
     <h1>Thank you, <span id="donen" class="big" style="color:var(--accent)"></span>!</h1>
-    <p class="lede" id="sendstate">Sending your recordings…</p>
-    <button class="btn hidden" id="retry">Try sending again</button>
-    <div class="err hidden" id="webnote">You're in an in-app browser (like Lark), where saving files usually doesn't work. If the send above didn't succeed, tap the <b>⋯</b> menu → <b>Open in browser</b> (Safari / Chrome), reopen this link and finish again — the auto-send works there.</div>
-    <button class="btn ghost" id="download">Download instead (.zip)</button>
-    <p class="foot">Backup only: if you download it, email the file to <strong>harshul.dhar@nexxbase.com</strong>.</p>
-    <button class="btn ghost" id="again">Record again from the start</button>
+    <p class="lede" id="sendstate">Saving your recordings…</p>
+    <div id="fallback" class="hidden" style="display:flex; flex-direction:column; gap:14px">
+      <div class="err hidden" id="webnote">You're in an in-app browser (like Lark), where saving files usually doesn't work. Tap the <b>⋯</b> menu → <b>Open in browser</b> (Safari / Chrome), reopen this link and finish again — it saves automatically there.</div>
+      <button class="btn" id="retry">Try saving again</button>
+      <button class="btn ghost" id="download">Download instead (.zip)</button>
+      <p class="foot">Or email the downloaded file to <strong>harshul.dhar@nexxbase.com</strong>.</p>
+    </div>
+    <button class="btn ghost hidden" id="again">Record again from the start</button>
   </section>
 </div>
 
@@ -277,17 +279,23 @@ const inApp=/Lark|Feishu|MicroMessenger|WeChat|WhatsApp|Instagram|FBAN|FBAV|Line
 let finalZip=null;
 function buildZip(){ return makeZip(Object.keys(clips).map(nm=>({name:nm,data:clips[nm]}))); }
 async function trySend(){
-  $("sendstate").textContent="Sending your recordings…"; $("sendstate").style.color="var(--muted)"; $("retry").classList.add("hidden");
+  $("sendstate").textContent="Saving your recordings…"; $("sendstate").style.color="var(--muted)";
+  $("fallback").classList.add("hidden");
   try{
     const r=await fetch("/api/upload?name="+encodeURIComponent(name),{method:"POST",headers:{"Content-Type":"application/zip"},body:finalZip});
     let j={}; try{ j=await r.json(); }catch(_){}
-    if(!r.ok) throw new Error((j.error||("HTTP "+r.status))+(j.hint?" ("+j.hint+")":""));
-    $("sendstate").innerHTML="&#10003; Sent automatically — you're all done. Thank you!"; $("sendstate").style.color="var(--ok)";
-    $("webnote").classList.add("hidden");
+    if(!r.ok || !j.confirmed) throw new Error((j.error||("HTTP "+r.status))+(j.hint?" ("+j.hint+")":""));
+    // confirmed stored in the collector -> clean "you're done"; no download/email shown at all
+    $("sendstate").innerHTML="&#10003; All done — your recordings are saved. You can close this page. Thank you!";
+    $("sendstate").style.color="var(--ok)";
+    $("again").classList.remove("hidden");
   }catch(e){
-    $("sendstate").innerHTML="Couldn't auto-send — "+String(e.message||e).slice(0,110); $("sendstate").style.color="var(--accent)";
-    $("retry").classList.remove("hidden");
-    if(inApp) $("webnote").classList.remove("hidden");
+    console.error("auto-save failed:", e);                  // detail for debugging; the speaker just sees a clean message
+    $("sendstate").innerHTML="We couldn't save it automatically — please use an option below.";
+    $("sendstate").style.color="var(--accent)";
+    $("fallback").classList.remove("hidden");
+    $("webnote").classList.toggle("hidden", !inApp);
+    $("again").classList.remove("hidden");
   }
 }
 async function finish(){

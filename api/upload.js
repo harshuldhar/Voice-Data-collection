@@ -1,6 +1,6 @@
 // Vercel serverless function: receives a colleague's recording zip and stores it in Vercel Blob.
 // Requires a Blob store linked to the project (Vercel injects BLOB_READ_WRITE_TOKEN automatically).
-import { put } from '@vercel/blob';
+import { put, head } from '@vercel/blob';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -36,7 +36,10 @@ export default async function handler(req, res) {
       contentType: 'application/zip',
       addRandomSuffix: true,
     });
-    res.status(200).json({ ok: true, url: blob.url, bytes: body.length });
+    // Verify it actually landed in the store before telling the client it's saved.
+    const meta = await head(blob.url);
+    const confirmed = !!(meta && meta.size > 0);
+    res.status(confirmed ? 200 : 500).json({ ok: confirmed, confirmed, url: blob.url, size: meta && meta.size });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });
   }
