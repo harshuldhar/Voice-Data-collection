@@ -2,3 +2,6 @@ node_modules/
 .vercel
 .DS_Store
 collected/
+unzipped/
+pulled_manifest.txt
+.env*

@@ -217,7 +217,7 @@ function drawMeter(rms){
 
 // ---------- mic ----------
 async function initMic(){
-  stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:false,autoGainControl:false}});
+  stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
   audioCtx=new (window.AudioContext||window.webkitAudioContext)();
   srcRate=audioCtx.sampleRate;
   source=audioCtx.createMediaStreamSource(stream);
