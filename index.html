@@ -217,7 +217,7 @@ function drawMeter(rms){
 
 // ---------- mic ----------
 async function initMic(){
-  stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+  stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:false,autoGainControl:false}});
   audioCtx=new (window.AudioContext||window.webkitAudioContext)();
   srcRate=audioCtx.sampleRate;
   source=audioCtx.createMediaStreamSource(stream);
@@ -262,6 +262,11 @@ function stopRec(){
   let len=0; for(const c of chunks) len+=c.length;
   const merged=new Float32Array(len); let o=0; for(const c of chunks){merged.set(c,o);o+=c.length;}
   if(len < srcRate*0.25){ $("idle").style.display="flex"; $("idle").textContent="that was very short — tap record and speak"; return; }
+  // Normalize level so a feeble raw-mic capture doesn't produce near-silent clips (fixes the low-amplitude
+  // regression + the feeble playback). Peak-normalize to 0.95 with a capped gain so a near-silent
+  // recording isn't blown up into pure noise.
+  { let pk=0; for(let i=0;i<merged.length;i++){const a=Math.abs(merged[i]); if(a>pk)pk=a;}
+    if(pk>0.01){ const g=Math.min(12,0.95/pk); for(let i=0;i<merged.length;i++) merged[i]*=g; } }
   lastWav=encodeWav(resampleTo16k(merged,srcRate));
   if(lastUrl) URL.revokeObjectURL(lastUrl);
   lastUrl=URL.createObjectURL(new Blob([lastWav],{type:"audio/wav"}));
